@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>qu'es ce que tu fais 👀</title>
+  <style>
+    :root{ --bg:#0b0f12; --muted:#a1a1a1; }
+    html,body{height:100%}
+    body{ margin:0; background:var(--bg); color:#fff; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif; overflow:hidden; display:grid; place-items:center; }
+    #fx{ position:fixed; inset:0; width:100vw; height:100vh; pointer-events:none; z-index:0; }
+    .wrap{ position:relative; z-index:1; width:100%; max-width:860px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:16px; gap:16px; }
+    .count{ display:flex; justify-content:center; align-items:center; gap:16px; font-size:clamp(96px, 18vw, 180px); font-weight:900; line-height:1; user-select:none; margin-inline:auto; text-align:center; transition: transform .18s ease, filter .18s ease; }
+    .count.pulse{ transform:scale(1.02); filter:drop-shadow(0 0 30px rgba(255,230,102,.55)) drop-shadow(0 0 48px rgba(255,158,44,.35)); }
+    .digit-col{ height:1em; overflow:hidden; min-width:.7em; }
+    .digit-col.moving{ transform:perspective(600px) rotateX(12deg); }
+    .digit-col.settle{ animation:settleBounce .42s ease-out; }
+    @keyframes settleBounce{ 0%{transform:translateY(-8px)} 60%{transform:translateY(3px)} 100%{transform:translateY(0)} }
+    .digit-col.finalSettle{ animation:settleBounceFinal .7s cubic-bezier(.28,1.4,.5,1); }
+    @keyframes settleBounceFinal{ 0%{transform:translateY(-22px)} 40%{transform:translateY(8px)} 70%{transform:translateY(-4px)} 100%{transform:translateY(0)} }
+    .digit-inner{ display:flex; flex-direction:column; will-change:transform; transition:transform .62s cubic-bezier(.22,1,.36,1); }
+    .digit-inner span{ height:1em; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#fff,#ffe066 40%,#ff9e2c 70%,#ff7b00 100%); -webkit-background-clip:text; background-clip:text; color:transparent; text-shadow:0 0 12px rgba(255,230,102,.35); }
+    .count.final .digit-inner span{ background:linear-gradient(180deg,#fff7d1,#ffd166 40%,#ff8c33 75%,#e64500 100%); -webkit-background-clip:text; background-clip:text; color:transparent; text-shadow:0 0 20px rgba(255,180,80,.95),0 0 40px rgba(255,110,0,.7); }
+    .count.final{ animation:finaleGlow 1.3s ease-out forwards; }
+    @keyframes finaleGlow{ 0%{text-shadow:0 0 0 transparent} 50%{text-shadow:0 0 35px rgba(255,230,102,.95),0 0 65px rgba(255,158,44,.75),0 0 95px rgba(255,123,0,.55)} 100%{text-shadow:0 0 24px rgba(255,230,102,.75),0 0 44px rgba(255,158,44,.65),0 0 70px rgba(255,123,0,.55)} }
+    .suffix{ font-size:20px; color:var(--muted) }
+    .message{ font-size:clamp(24px, 5vw, 34px); font-weight:800; background:linear-gradient(90deg,#ffe066,#ff9e2c,#ff7b00); -webkit-background-clip:text; color:transparent; opacity:0; transform:translateY(10px) scale(.9); pointer-events:none; }
+    .message.show{ opacity:1; transform:translateY(0) scale(1); animation: msgBounce 1s cubic-bezier(.28,1.4,.5,1), flameGlow 3s ease-in-out 1s infinite; }
+    @keyframes msgBounce{ 0%{ transform:translateY(20px) scale(.85); opacity:0 } 50%{ transform:translateY(-10px) scale(1.1); opacity:1 } 100%{ transform:translateY(0) scale(1); opacity:1 } }
+    @keyframes flameGlow{ 0%{ text-shadow:0 0 18px rgba(255,230,120,.8),0 0 38px rgba(255,150,40,.65),0 0 65px rgba(255,80,0,.45);} 50%{ text-shadow:0 0 28px rgba(255,250,180,1),0 0 60px rgba(255,180,60,.9),0 0 110px rgba(255,100,0,.75);} 100%{ text-shadow:0 0 18px rgba(255,230,120,.8),0 0 38px rgba(255,150,40,.65),0 0 65px rgba(255,80,0,.45);} }
+  </style>
+</head>
+<body>
+  <canvas id="fx"></canvas>
+  <div class="wrap">
+    <div class="count" id="count" title="Toca para sumar 10">
+      <div class="digit-col"><div class="digit-inner"></div></div>
+      <div class="digit-col"><div class="digit-inner"></div></div>
+      <div class="digit-col"><div class="digit-inner"></div></div>
+    </div>
+    <div class="suffix">giorni</div>
+    <div class="message" id="message">Buoni 100 giorni, amore mio ✨</div>
+  </div>
+
+  <script>
+    const TARGET=100; let current=0,running=false;
+    const countEl=document.getElementById('count'); const msg=document.getElementById('message');
+    const cols=[...countEl.querySelectorAll('.digit-col')]; const inners=cols.map(c=>c.querySelector('.digit-inner'));
+    const state=[0,0,0]; let lineH=0;
+
+    function measureLineH(){ let h=inners[0]?.children[0]?.getBoundingClientRect().height||0; if(!h){ const fs=parseFloat(getComputedStyle(countEl).fontSize)||0; h=fs||100; } lineH=Math.max(1,Math.round(h)); }
+    function syncToStateInstant(){ for(let i=0;i<3;i++){ const inner=inners[i]; const prev=inner.style.transition; inner.style.transition='none'; inner.style.transform=`translateY(${-state[i]*lineH}px)`; void inner.offsetHeight; inner.style.transition=prev; } cols[0].style.visibility=state[0]===0?'hidden':'visible'; }
+
+    const roCount=new ResizeObserver(()=>{ measureLineH(); syncToStateInstant(); }); roCount.observe(countEl);
+    if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(()=>{ measureLineH(); syncToStateInstant(); }); }
+
+    function buildDigits(){
+      inners.forEach(inner=>{ inner.innerHTML=''; for(let i=0;i<=10;i++){ const sp=document.createElement('span'); sp.textContent=i%10; inner.appendChild(sp); } });
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{ measureLineH(); setNumber(0,true); cols[0].style.visibility='hidden'; }));
+    }
+
+    const baseDurations=[780,720,660];
+    function speedFactor(next){ const progress=Math.min(1,Math.max(0,next/TARGET)); const eased=progress*progress; return 1+eased*2.4; }
+    function durationFor(colIndex,next){ const weight=colIndex===0?1.45:(colIndex===1?1.25:1.0); return Math.round(baseDurations[colIndex]*speedFactor(next)*weight); }
+
+    const fx=document.getElementById('fx'); const ctx=fx.getContext('2d',{alpha:true});
+    let W=0,H=0,particles=[]; let emitSparks=true,flameCurtain=false; let sideRight=true;
+
+    function resizeFX(){ const w=Math.max(document.documentElement.clientWidth,innerWidth||0); const h=Math.max(document.documentElement.clientHeight,innerHeight||0);
+      W=fx.width=Math.floor(w*devicePixelRatio); H=fx.height=Math.floor(h*devicePixelRatio); fx.style.width=w+'px'; fx.style.height=h+'px'; ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0); }
+    addEventListener('resize',resizeFX,{passive:true}); resizeFX();
+
+    function countCenter(){ const r=countEl.getBoundingClientRect(); return { cx:r.left+r.width/2, cy:r.top+r.height*0.45, half:r.width/2 }; }
+    function sparkColor(h,a){ if(h==='white')return`rgba(255,255,255,${a})`; if(h==='amber')return`rgba(255,209,102,${a})`; return`rgba(255,142,51,${a})`; }
+
+    function emitBurst(side='right',n=160){
+      if(!emitSparks) return;
+      const {cx,cy,half}=countCenter(); const originRight={x:cx+half*0.35,y:cy}; const originLeft={x:cx-half*0.35,y:cy};
+      for(let i=0;i<n;i++){
+        const useLeft=(side==='left')?true:(side==='right'?false:(i%2===0)); const o=useLeft?originLeft:originRight;
+        const speed=1.9+Math.random()*3.0; const spread=0.6+Math.random()*0.6; const baseAng=-Math.PI/2; const lateral=(useLeft?-1:1)*(0.28+Math.random()*0.55); const ang=baseAng+lateral*spread;
+        const vx=Math.cos(ang)*speed, vy=Math.sin(ang)*speed;
+        particles.push({ kind:'spark', x:o.x,y:o.y,vx,vy, g:0.052+Math.random()*0.06, drag:0.991+Math.random()*0.006, life:660+Math.random()*480, r:3.2+Math.random()*2.8, hue:(Math.random()<.35)?'white':(Math.random()<.75?'amber':'orange'), alpha:1, prevX:o.x, prevY:o.y });
+      }
+    }
+
+    function startFlameCurtain(durationMs=2600){
+      flameCurtain=true; const start=performance.now();
+      function emitFlames(now){
+        if(!flameCurtain) return;
+        const t=now-start; const k=Math.max(0,1-Math.max(0,t-1500)/700); const base=24+Math.floor(28*k);
+        for(let i=0;i<base;i++){
+          const x=Math.random()*(W/devicePixelRatio), y=(H/devicePixelRatio)+10;
+          const up=2+Math.random()*3.2, side=(Math.random()-.5)*.9;
+          particles.push({ kind:'flame', x,y, vx:side, vy:-up, g:-.004, drag:.994, life:1200+Math.random()*900, r:6+Math.random()*16, t0:now+Math.random()*300, alpha:1 });
+        }
+        if(t<durationMs) requestAnimationFrame(emitFlames); else flameCurtain=false;
+      }
+      requestAnimationFrame(emitFlames);
+    }
+
+    function igniteBurst(){
+      const {cx,cy,half}=countCenter(); const originRight={x:cx+half*0.35,y:cy}; const originLeft={x:cx-half*0.35,y:cy};
+      for(let i=0;i<380;i++){
+        const useLeft=i%2===0; const o=useLeft?originLeft:originRight;
+        const speed=2+Math.random()*3.6, spread=.65+Math.random()*0.7; const baseAng=-Math.PI/2; const lateral=(useLeft?-1:1)*(0.3+Math.random()*0.6); const ang=baseAng+lateral*spread;
+        const vx=Math.cos(ang)*speed, vy=Math.sin(ang)*speed;
+        particles.push({ kind:'spark', x:o.x,y:o.y,vx,vy, g:.044+Math.random()*0.055, drag:.99+Math.random()*0.006, life:800+Math.random()*520, r:3.2+Math.random()*3.4, hue:(Math.random()<.35)?'white':(Math.random()<.75?'amber':'orange'), alpha:1, prevX:o.x, prevY:o.y });
+      }
+      startFlameCurtain(2600);
+    }
+
+    function stepFX(){
+      ctx.clearRect(0,0,W,H); ctx.globalCompositeOperation='lighter'; const now=performance.now();
+      for(let i=particles.length-1;i>=0;i--){
+        const p=particles[i];
+        if(p.kind==='spark'){
+          p.vy+=p.g; p.vx*=p.drag; p.vy*=p.drag; p.prevX=p.x; p.prevY=p.y; p.x+=p.vx; p.y+=p.vy; p.life-=16; p.alpha=Math.max(0,Math.min(1,p.life/700));
+          if(p.life<=0||p.y>H+40||p.x<-80||p.x>W+80){ particles.splice(i,1); continue; }
+          ctx.strokeStyle=sparkColor(p.hue,p.alpha*.6); ctx.lineWidth=Math.max(1,p.r*.7); ctx.beginPath(); ctx.moveTo(p.prevX,p.prevY); ctx.lineTo(p.x,p.y); ctx.stroke();
+          ctx.fillStyle=sparkColor(p.hue,p.alpha); ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+        } else {
+          const s=Math.sin((now-p.t0)*.006); p.vx+=s*.02; p.vy+=p.g; p.vx*=p.drag; p.vy*=p.drag; p.x+=p.vx; p.y+=p.vy; p.life-=16; p.alpha=Math.max(0,Math.min(1,p.life/1300));
+          if(p.life<=0||p.y<-60){ particles.splice(i,1); continue; }
+          const grd=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*1.4);
+          grd.addColorStop(0,`rgba(255,240,180,${p.alpha*.95})`);
+          grd.addColorStop(.35,`rgba(255,190,100,${p.alpha*.75})`);
+          grd.addColorStop(.8,`rgba(255,110,10,${p.alpha*.45})`);
+          grd.addColorStop(1,`rgba(255,110,10,0)`);
+          ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(p.x,p.y,p.r*1.4,0,Math.PI*2); ctx.fill();
+        }
+      }
+      requestAnimationFrame(stepFX);
+    }
+    requestAnimationFrame(stepFX);
+
+    function triggerBounceSparks(colIndex,touchSide){
+      let side='right';
+      if(colIndex===2){ side=touchSide?'right':'left'; }
+      else if(colIndex===1){ side=touchSide?'left':'right'; }
+      else if(colIndex===0){ side=(current===TARGET)?'both':(touchSide?'right':'left'); }
+      const amount=colIndex===0?200:(colIndex===1?140:120);
+      emitBurst(side,amount);
+    }
+
+    function moveCol(i,targetDigit,touchSide,dur){
+      const inner=inners[i], col=cols[i];
+      inner.style.transitionProperty='transform'; inner.style.transitionDuration=dur+'ms'; inner.style.transitionTimingFunction='cubic-bezier(.22,1,.36,1)';
+      const cur=state[i]; if(i===0){ cols[0].style.visibility=targetDigit===0?'hidden':'visible'; }
+      let wrap=false, visualTarget=targetDigit; if(targetDigit<cur){ visualTarget=targetDigit+10; wrap=true; }
+      col.classList.add('moving'); inner.style.transform=`translateY(${-visualTarget*lineH}px)`;
+      const onEnd=()=>{ inner.removeEventListener('transitionend',onEnd);
+        if(wrap){ const prev=inner.style.transition; inner.style.transition='none'; inner.style.transform=`translateY(${-targetDigit*lineH}px)`; void inner.offsetHeight; inner.style.transition=prev; }
+        col.classList.remove('moving');
+        if(i===0 && current+10===TARGET){ col.classList.add('finalSettle'); triggerBounceSparks(i,touchSide); setTimeout(()=>col.classList.remove('finalSettle'),800); }
+        else { col.classList.add('settle'); triggerBounceSparks(i,touchSide); setTimeout(()=>col.classList.remove('settle'),400); }
+      };
+      inner.addEventListener('transitionend',onEnd,{once:true});
+      state[i]=targetDigit;
+    }
+
+    function setNumber(n,instant=false){
+      const s=String(n).padStart(3,'0'); const digits=[+s[0],+s[1],+s[2]];
+      for(let i=0;i<3;i++){
+        if(instant){
+          const inner=inners[i]; const prev=inner.style.transition;
+          inner.style.transition='none'; inner.style.transform=`translateY(${-digits[i]*lineH}px)`; state[i]=digits[i]; void inner.offsetHeight; inner.style.transition=prev;
+        } else if(digits[i]!==state[i]){
+          moveCol(i,digits[i], true, baseDurations[i]);
+        }
+      }
+      cols[0].style.visibility=digits[0]===0?'hidden':'visible';
+    }
+
+    function spinUnitsOnce(touchSide,dur){
+      const i=2, inner=inners[i], col=cols[i], cur=state[i];
+      inner.style.transitionDuration=dur+'ms'; inner.style.transitionTimingFunction='cubic-bezier(.22,1,.36,1)';
+      inner.style.transform=`translateY(${- (cur+10) * lineH}px)`;
+      return new Promise(res=>{
+        const h=()=>{ inner.removeEventListener('transitionend',h);
+          const prev=inner.style.transition; inner.style.transition='none'; inner.style.transform=`translateY(${-cur*lineH}px)`; void inner.offsetHeight; inner.style.transition=prev;
+          col.classList.add('settle'); triggerBounceSparks(2,touchSide); setTimeout(()=>col.classList.remove('settle'),400); res();
+        };
+        inner.addEventListener('transitionend',h,{once:true});
+      });
+    }
+
+    function digitsOf(n){ const s=String(n).padStart(3,'0'); return [+s[0],+s[1],+s[2]]; }
+
+    function addTen(){
+      if(running||current>=TARGET) return;
+      running=true;
+      if('vibrate' in navigator) navigator.vibrate(12);
+      countEl.classList.add('pulse'); setTimeout(()=>countEl.classList.remove('pulse'),240);
+      const touchSide=sideRight; sideRight=!sideRight;
+
+      const next=Math.min(current+10,TARGET);
+      const [c0,d0,u0]=digitsOf(current); const [c1,d1,u1]=digitsOf(next);
+      const durU=durationFor(2,next), durD=durationFor(1,next), durC=durationFor(0,next);
+
+      const spinU=spinUnitsOnce(touchSide,durU);
+      if(d1!==d0) setTimeout(()=>moveCol(1,d1,touchSide,durD),60);
+      if(c1!==c0) setTimeout(()=>moveCol(0,c1,touchSide,durC),120);
+
+      spinU.then(()=>{
+        current=next;
+        if(current===TARGET){
+          emitSparks=false;
+          igniteBurst();
+          countEl.classList.add('final');
+          msg.classList.add('show');
+        }
+        running=false;
+      });
+    }
+
+    buildDigits();
+    addEventListener('orientationchange',()=>{ measureLineH(); syncToStateInstant(); },{passive:true});
+    countEl.addEventListener('pointerdown',addTen,{passive:true});
+    requestAnimationFrame(stepFX);
+  </script>
+</body>
+</html>
